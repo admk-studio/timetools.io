@@ -322,3 +322,49 @@ func TestClientIP(t *testing.T) {
 		t.Errorf("trusted proxy: ip = %q, want 203.0.113.9", ip)
 	}
 }
+
+func TestHTTPSUpgradeForBrowsersOnly(t *testing.T) {
+	cfg := FromEnv()
+	cfg.TrustProxy = true
+	s, err := New(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.now = func() time.Time { return testInstant }
+
+	req := httptest.NewRequest(http.MethodGet, "http://timetools.io/tokyo", nil)
+	req.Header.Set("User-Agent", browserUA)
+	req.Header.Set("Accept", htmlAccept)
+	req.Header.Set("X-Forwarded-Proto", "http")
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusMovedPermanently {
+		t.Fatalf("browser over http = %d, want 301", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "https://timetools.io/tokyo" {
+		t.Errorf("redirect location = %q", loc)
+	}
+
+	// curl over plain HTTP gets the answer, not a redirect.
+	req = httptest.NewRequest(http.MethodGet, "http://timetools.io/tokyo", nil)
+	req.Header.Set("User-Agent", curlUA)
+	req.Header.Set("Accept", "*/*")
+	req.Header.Set("X-Forwarded-Proto", "http")
+	rec = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("curl over http = %d, want 200", rec.Code)
+	}
+
+	// Without a trusted proxy the header is not believed: no redirect.
+	s2 := testServer(t)
+	req = httptest.NewRequest(http.MethodGet, "http://timetools.io/tokyo", nil)
+	req.Header.Set("User-Agent", browserUA)
+	req.Header.Set("Accept", htmlAccept)
+	req.Header.Set("X-Forwarded-Proto", "http")
+	rec = httptest.NewRecorder()
+	s2.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("untrusted proxy = %d, want 200 (no redirect)", rec.Code)
+	}
+}

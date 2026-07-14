@@ -60,6 +60,16 @@ func (s *Server) route(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// `curl timetools.io/tokyo` has to work without -L, so the proxy must
+	// not blanket-redirect to HTTPS. Instead we upgrade selectively:
+	// browsers get sent to HTTPS, terminals get their answer over HTTP.
+	// Only possible when a trusted proxy reports the original scheme.
+	if s.cfg.TrustProxy && r.Header.Get("X-Forwarded-Proto") == "http" &&
+		negotiate(r) == formatHTML {
+		http.Redirect(w, r, "https://"+r.Host+r.URL.RequestURI(), http.StatusMovedPermanently)
+		return
+	}
+
 	switch trimPath(r) {
 	case "":
 		s.handleRoot(w, r)

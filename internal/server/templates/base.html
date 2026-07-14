@@ -1,0 +1,155 @@
+{{define "head"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}}</title>
+{{if .Desc}}<meta name="description" content="{{.Desc}}">{{end}}
+<meta property="og:title" content="{{.Title}}">
+{{if .Desc}}<meta property="og:description" content="{{.Desc}}">{{end}}
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%8F%B0%3C/text%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #0d1117;
+  --panel: #161b22;
+  --border: #30363d;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --accent: #58d6c4;
+  --warn: #e3b341;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #fafaf8;
+    --panel: #ffffff;
+    --border: #e2e2dd;
+    --text: #1b1f24;
+    --muted: #6a737d;
+    --accent: #0e8074;
+    --warn: #9a6700;
+  }
+}
+* { box-sizing: border-box; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+main { width: min(880px, 100% - 2.5rem); margin: 0 auto; flex: 1; padding: 3rem 0 4rem; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+h1 { font-size: 1.6rem; margin-bottom: .3rem; }
+h1 a { color: inherit; }
+.tagline { color: var(--muted); margin-bottom: 2.2rem; }
+.clock { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1rem; margin-top: 1.6rem; }
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.2rem 1.3rem;
+}
+.card h2 { font-size: 1.05rem; margin-bottom: .1rem; }
+.card .zone { color: var(--muted); font-size: .8rem; font-family: var(--mono); }
+.card .big { font-size: 2.1rem; font-weight: 600; margin: .55rem 0 .1rem; }
+.card .date { color: var(--muted); font-size: .88rem; }
+.card dl { margin-top: .8rem; font-size: .85rem; display: grid; grid-template-columns: auto 1fr; gap: .1rem .7rem; }
+.card dt { color: var(--muted); }
+.card dd { font-family: var(--mono); }
+.card .change { margin-top: .7rem; font-size: .8rem; color: var(--warn); }
+.term {
+  background: #0d1117;
+  color: #e6edf3;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.1rem 1.3rem;
+  font-family: var(--mono);
+  font-size: .86rem;
+  line-height: 1.7;
+  overflow-x: auto;
+  white-space: pre;
+}
+.term .p { color: #7ee787; }
+.term .c { color: #8b949e; }
+.term .g { color: #7ee787; }
+.term .y { color: #e3b341; }
+.term .cy { color: #79c0ff; }
+section { margin-top: 2.6rem; }
+section h3 { font-size: 1.05rem; margin-bottom: .7rem; }
+section p { color: var(--muted); max-width: 62ch; }
+footer {
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: .82rem;
+  padding: 1.1rem 0;
+}
+footer .inner { width: min(880px, 100% - 2.5rem); margin: 0 auto; display: flex; gap: 1.4rem; flex-wrap: wrap; }
+.hint { color: var(--muted); font-size: .85rem; margin-top: 1.4rem; }
+.hint code, section code {
+  font-family: var(--mono);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: .1rem .35rem;
+  font-size: .85em;
+}
+</style>
+</head>
+<body>
+<main>
+{{end}}
+
+{{define "foot"}}
+</main>
+<footer>
+  <div class="inner">
+    {{if .RepoName}}<a href="{{.RepoHref}}">open source — {{.RepoName}}</a>{{end}}
+    {{if and .LinkText .LinkURL}}<a href="{{.LinkURL}}">{{.LinkText}}</a>{{end}}
+    <span>{{.BaseURL}}{{if .Version}} · {{.Version}}{{end}}</span>
+  </div>
+</footer>
+<script>
+(function () {
+  var clocks = document.querySelectorAll("[data-clock]");
+  if (!clocks.length) return;
+  function setDate(el, now, tz) {
+    var dateEl = el.parentElement.querySelector("[data-date]");
+    if (!dateEl) return;
+    var opts = { weekday: "long", day: "numeric", month: "long", year: "numeric" };
+    if (tz) opts.timeZone = tz;
+    dateEl.textContent = new Intl.DateTimeFormat("en-GB", opts).format(now);
+  }
+  function tick() {
+    var now = new Date();
+    clocks.forEach(function (el) {
+      try {
+        if (el.hasAttribute("data-local")) {
+          el.textContent = now.toTimeString().slice(0, 8);
+          setDate(el, now, null);
+        } else if (el.getAttribute("data-tz")) {
+          var tz = el.getAttribute("data-tz");
+          el.textContent = new Intl.DateTimeFormat("en-GB", {
+            timeZone: tz, hour: "2-digit", minute: "2-digit",
+            second: "2-digit", hour12: false
+          }).format(now);
+          setDate(el, now, tz);
+        } else {
+          // Fixed offsets like UTC+05:30: shift the instant, read as UTC.
+          var off = parseInt(el.getAttribute("data-offset") || "0", 10);
+          el.textContent = new Date(now.getTime() + off * 1000)
+            .toISOString().slice(11, 19);
+        }
+      } catch (e) { /* leave the server-rendered time in place */ }
+    });
+  }
+  tick();
+  setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>
+{{end}}

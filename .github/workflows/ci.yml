@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: gofmt
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then
+            echo "files need gofmt:" && echo "$out" && exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: tests
+        run: go test -race ./...
+
+      - name: build
+        run: CGO_ENABLED=0 go build ./...
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: docker build
+        run: docker build -t timetools:ci .
+
+      - name: smoke test
+        run: |
+          docker run -d --rm -p 8080:8080 --name timetools timetools:ci
+          sleep 2
+          curl -fsS http://localhost:8080/health
+          curl -fsS http://localhost:8080/tokyo | grep -q Tokyo
+          curl -fsS http://localhost:8080/nyc/london | grep -q "working hours"
+          curl -fsS -H 'Accept: application/json' http://localhost:8080/berlin | grep -q '"timezone": "Europe/Berlin"'
+          docker stop timetools

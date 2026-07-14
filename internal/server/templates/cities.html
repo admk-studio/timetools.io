@@ -1,0 +1,24 @@
+{{define "cities"}}{{template "head" .}}
+<h1><a href="/">{{.BaseURL}}</a></h1>
+<p class="tagline">current local time</p>
+
+<div class="cards">
+{{range .Cities}}
+  <div class="card">
+    <h2>{{.Name}}</h2>
+    <div class="zone">{{.Zone}}</div>
+    <div class="big clock" data-clock {{if .TZ}}data-tz="{{.TZ}}"{{else}}data-offset="{{.OffsetSecs}}"{{end}}>{{.Time}}</div>
+    <div class="date" data-date>{{.Date}}</div>
+    <dl>
+      <dt>offset</dt><dd>{{.Offset}}{{if .Abbrev}} ({{.Abbrev}}){{end}}</dd>
+      {{if .Status}}<dt>status</dt><dd>{{.Status}}</dd>{{end}}
+      {{if .Sunrise}}<dt>sunrise</dt><dd>{{.Sunrise}}</dd><dt>sunset</dt><dd>{{.Sunset}}</dd>{{end}}
+      {{if .Daylight}}<dt>daylight</dt><dd>{{.Daylight}}</dd>{{end}}
+    </dl>
+    {{if .Change}}<div class="change">{{.Change}}</div>{{end}}
+  </div>
+{{end}}
+</div>
+
+<p class="hint">Same thing in a terminal: <code>curl {{.BaseURL}}{{range .Cities}}/{{.Name | urlquery}}{{end}}</code></p>
+{{template "foot" .}}{{end}}

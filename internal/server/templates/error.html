@@ -1,0 +1,18 @@
+{{define "error"}}{{template "head" .}}
+<h1><a href="/">{{.BaseURL}}</a></h1>
+<p class="tagline">that didn't work</p>
+
+<section>
+  <h3>No place called “{{.Query}}”</h3>
+  {{if .Suggestions}}
+  <p>Did you mean:</p>
+  <div class="cards">
+    {{range .Suggestions}}
+    <div class="card"><h2><a href="/{{.}}">{{.}}</a></h2></div>
+    {{end}}
+  </div>
+  {{else}}
+  <p>Try a city name (<code>/tokyo</code>), an IANA zone (<code>/europe/paris</code>), an abbreviation (<code>/pst</code>) or an offset (<code>/utc+5:30</code>).</p>
+  {{end}}
+</section>
+{{template "foot" .}}{{end}}

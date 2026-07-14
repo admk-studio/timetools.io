@@ -1,0 +1,44 @@
+{{define "landing"}}{{template "head" .}}
+<h1>{{.BaseURL}}</h1>
+<p class="tagline">The time service you can curl. Current time, time zones, DST changes and sunrise for any city — in your terminal, as JSON, or right here.</p>
+
+<div class="term"><span class="p">$</span> curl {{.BaseURL}}/tokyo
+
+  <span class="cy">Tokyo</span> — <span class="c">Asia/Tokyo</span>
+
+  <span class="g">22:41:07</span>  Tuesday, 14 July 2026
+  UTC+9 · JST · no seasonal clock changes
+
+  sunrise 04:35 · sunset 18:58 · daylight 14h23m
+
+<span class="p">$</span> curl {{.BaseURL}}/nyc/london/tokyo   <span class="c"># compare, with working-hours overlap</span>
+<span class="p">$</span> curl {{.BaseURL}}/unix              <span class="c"># epoch seconds</span>
+<span class="p">$</span> curl {{.BaseURL}}/berlin?format=json</div>
+
+<div class="cards">
+  <div class="card">
+    <h2>Your time</h2>
+    <div class="zone">as your browser reports it</div>
+    <div class="big clock" data-clock data-local></div>
+    <div class="date" data-date></div>
+  </div>
+  <div class="card">
+    <h2>UTC</h2>
+    <div class="zone">UTC</div>
+    <div class="big clock" data-clock data-tz="UTC"></div>
+    <div class="date" data-date></div>
+  </div>
+</div>
+
+<section>
+  <h3>What it knows</h3>
+  <p>Any city or time zone: <code>/tokyo</code>, <code>/new_york</code>, <code>/america/new_york</code>, abbreviations like <code>/pst</code> and <code>/ist</code>, fixed offsets like <code>/utc+5:30</code>. Ask for several at once — <code>/nyc/london/tokyo</code> — and you get a comparison table with the hours your teams overlap. Each answer includes the UTC offset, whether daylight saving is active and when the clocks change next, plus sunrise and sunset for the city you asked about.</p>
+</section>
+
+<section>
+  <h3>For scripts</h3>
+  <p>Append <code>?format=json</code> or send <code>Accept: application/json</code> and every endpoint answers in stable, documented JSON. <code>/unix</code> and <code>/utc</code> return bare values for shell one-liners.</p>
+</section>
+
+<p class="hint">Try <code>curl {{.BaseURL}}</code> from a terminal — this page answers in plain text there.</p>
+{{template "foot" .}}{{end}}

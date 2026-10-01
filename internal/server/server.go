@@ -82,6 +82,8 @@ func (s *Server) route(w http.ResponseWriter, r *http.Request) {
 		s.handleRoot(w, r)
 	case "help":
 		s.handleHelp(w, r)
+	case "timezone-converter":
+		s.handleConverter(w, r)
 	case "health", "healthz":
 		s.writeText(w, http.StatusOK, "ok\n")
 	case "version":

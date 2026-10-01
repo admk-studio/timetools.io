@@ -107,6 +107,7 @@ footer .inner { width: min(880px, 100% - 2.5rem); margin: 0 auto; display: flex;
 </main>
 <footer>
   <div class="inner">
+    <a href="/timezone-converter">Time zone converter</a>
     {{if .RepoName}}<a href="{{.RepoHref}}">open source — {{.RepoName}}</a>{{end}}
     {{if and .LinkText .LinkURL}}<a href="{{.LinkURL}}">{{.LinkText}}</a>{{end}}
     <span>{{.BaseURL}}{{if .Version}} · {{.Version}}{{end}}</span>

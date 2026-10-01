@@ -70,6 +70,18 @@ Typos get suggestions (`/tokio` → *did you mean tokyo?*), and everything
 above also works in a browser — the same URLs render as live-updating
 pages with a ticking clock.
 
+## Time zone converter
+
+[timetools.io/timezone-converter](https://timetools.io/timezone-converter)
+converts a chosen date and local time between cities, IANA time zones, or
+fixed UTC offsets. It shows both dates, the time difference, and daylight
+saving status. You can swap the zones, use the current time, and share a
+link to a specific conversion.
+
+The form works without JavaScript. Times skipped by a clock change are
+rejected; repeated times offer an explicit first/second occurrence choice.
+The converter is an HTML endpoint; the city endpoints below provide JSON.
+
 ## JSON for scripts
 
 Append `?format=json` or send `Accept: application/json`:

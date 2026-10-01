@@ -1,0 +1,183 @@
+{{define "converter"}}{{template "head" .}}
+<style>
+.converter-home { display: inline-block; margin-bottom: 1.1rem; font-size: .88rem; }
+.converter-form { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 1.4rem; }
+.converter-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.1rem 1.4rem; }
+.converter-field { min-width: 0; }
+.converter-field label { display: block; font-size: .9rem; font-weight: 600; margin-bottom: .35rem; }
+.converter-field input, .converter-field select {
+  display: block; width: 100%; min-width: 0; max-width: 100%; border: 1px solid var(--border);
+  border-radius: 6px; padding: .65rem .75rem; font: inherit; color: var(--text); background: var(--bg); color-scheme: dark;
+}
+.converter-field small { display: block; color: var(--muted); font-size: .78rem; margin-top: .35rem; }
+.converter-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .6rem; margin-top: 1.2rem; }
+.converter-button { border: 1px solid var(--border); border-radius: 6px; padding: .6rem .85rem; font: inherit; font-size: .88rem; font-weight: 600; background: var(--bg); color: var(--text); cursor: pointer; }
+.converter-button:hover { border-color: var(--accent); }
+.converter-button.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.converter-field input:focus-visible, .converter-field select:focus-visible, .converter-button:focus-visible, .converter-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.converter-notice { padding: .85rem 1rem; border: 1px solid var(--warn); border-radius: 6px; margin-bottom: 1.1rem; }
+.converter-notice p { margin-bottom: .7rem; }
+.converter-result { margin-top: 2rem; }
+.converter-result h2, .converter-info h2 { font-size: 1.1rem; }
+.converter-result .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: .8rem; }
+.converter-result .card { min-width: 0; overflow-wrap: anywhere; }
+.converter-result .card h3 { font-size: 1.1rem; margin-bottom: 0; }
+.converter-result .card p { max-width: none; }
+.converter-result .card .big { color: var(--text); font-size: clamp(2rem, 6vw, 2.8rem); margin: .35rem 0; }
+.converter-result .card.destination { border-color: var(--accent); }
+.converter-result .eyebrow { font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: .5rem; }
+.converter-result .offset { margin-top: .7rem; font-size: .9rem; }
+.converter-result .dst { font-size: .78rem; }
+.converter-result .day { color: var(--accent); font-size: .8rem; margin-top: .5rem; }
+.converter-difference { margin-top: 1rem; }
+.converter-link { font-size: .88rem; }
+.converter-info { border-top: 1px solid var(--border); padding-top: 1.5rem; }
+.converter-info p { margin-top: .6rem; }
+.converter-presets { display: flex; flex-wrap: wrap; gap: .5rem 1.2rem; margin-top: .8rem; font-size: .88rem; }
+#converter-feedback { font-size: .8rem; color: var(--muted); }
+.converter-button[hidden] { display: none; }
+@media (prefers-color-scheme: light) { .converter-field input, .converter-field select { color-scheme: light; } }
+@media (max-width: 560px) {
+  .converter-grid, .converter-result .cards { grid-template-columns: minmax(0, 1fr); }
+  .converter-form { padding: 1rem; }
+  .converter-actions .primary { width: 100%; }
+}
+</style>
+<a class="converter-home" href="/">← {{.BaseURL}}</a>
+<h1>Time Zone Converter</h1>
+<p class="tagline">One moment, two places. Convert a date and time with daylight saving taken into account.</p>
+
+{{with .Converter}}
+<form id="converter-form" class="converter-form" method="get" action="/timezone-converter">
+  {{if .Error}}<div class="converter-notice" role="alert">{{.Error}}</div>{{end}}
+  <div class="converter-grid">
+    <div class="converter-field">
+      <label for="converter-from">From city or time zone</label>
+      <input id="converter-from" name="from" value="{{.From}}" list="converter-zones" required maxlength="100" autocomplete="off" spellcheck="false" aria-describedby="from-help">
+      <small id="from-help">Try New York, London, or UTC+05:30.</small>
+    </div>
+    <div class="converter-field">
+      <label for="converter-to">To city or time zone</label>
+      <input id="converter-to" name="to" value="{{.To}}" list="converter-zones" required maxlength="100" autocomplete="off" spellcheck="false" aria-describedby="to-help">
+      <small id="to-help">Type a city or choose a time zone from the list.</small>
+    </div>
+    <div class="converter-field">
+      <label for="converter-date">Date in the starting time zone</label>
+      <input id="converter-date" name="date" type="date" value="{{.Date}}" min="0001-01-01" max="9999-12-31" required>
+    </div>
+    <div class="converter-field">
+      <label for="converter-time">Time in the starting time zone</label>
+      <input id="converter-time" name="time" type="time" value="{{.Time}}" step="1" required aria-describedby="time-help">
+      <small id="time-help">Results use a 24-hour clock.</small>
+    </div>
+  </div>
+  <datalist id="converter-zones">
+    <option value="UTC">Coordinated Universal Time</option>
+    <option value="New York"></option><option value="London"></option><option value="Tokyo"></option>
+    <option value="Los Angeles"></option><option value="Paris"></option><option value="Dubai"></option>
+    <option value="Singapore"></option><option value="Sydney"></option><option value="Mumbai"></option>
+    {{range .Zones}}<option value="{{.Name}}"></option>{{end}}
+  </datalist>
+  {{if .Ambiguous}}
+  <div class="converter-notice" style="margin-top: 1.1rem; margin-bottom: 0" role="status">
+    <p>This time occurs twice because the clocks move back. Choose which occurrence you mean.</p>
+    <div class="converter-field">
+      <label for="converter-occurrence">Repeated time</label>
+      <select id="converter-occurrence" name="occurrence">
+        <option value="earlier" {{if eq .Occurrence "earlier"}}selected{{end}}>First occurrence — {{.Earlier}}</option>
+        <option value="later" {{if eq .Occurrence "later"}}selected{{end}}>Second occurrence — {{.Later}}</option>
+      </select>
+    </div>
+  </div>
+  {{end}}
+  <div class="converter-actions">
+    <button class="converter-button primary" type="submit">Convert time</button>
+    <button class="converter-button" type="submit" name="action" value="swap">Swap zones</button>
+    <button id="converter-now" class="converter-button" type="submit" name="action" value="now" formnovalidate>Use current time</button>
+    <button id="converter-local" class="converter-button" type="button" hidden>Use my time zone</button>
+  </div>
+</form>
+
+{{with .Result}}
+<section class="converter-result" aria-labelledby="converter-result-heading">
+  <h2 id="converter-result-heading">Your converted time</h2>
+  <div class="cards">
+    <div class="card" id="conversion-source">
+      <p class="eyebrow">From</p>
+      <h3>{{.From.Name}}</h3>
+      <div class="zone">{{.From.Zone}}</div>
+      <p class="big clock"><time datetime="{{.From.ISO}}">{{.From.Time}}</time></p>
+      <p class="date">{{.From.Date}}</p>
+      <p class="offset">{{.From.Offset}}</p>
+      <p class="dst">{{.From.Status}}</p>
+    </div>
+    <div class="card destination" id="conversion-target">
+      <p class="eyebrow">To</p>
+      <h3>{{.To.Name}}</h3>
+      <div class="zone">{{.To.Zone}}</div>
+      <p class="big clock"><time datetime="{{.To.ISO}}">{{.To.Time}}</time></p>
+      <p class="date">{{.To.Date}}</p>
+      <p class="day">{{.Day}}</p>
+      <p class="offset">{{.To.Offset}}</p>
+      <p class="dst">{{.To.Status}}</p>
+    </div>
+  </div>
+  <p class="converter-difference">{{.Difference}}</p>
+  <div class="converter-actions">
+    <a id="converter-share" class="converter-link" href="{{.ShareURL}}">Link to this conversion</a>
+    <button id="converter-copy" class="converter-button" type="button" hidden>Copy link</button>
+    <span id="converter-feedback" role="status"></span>
+  </div>
+</section>
+{{end}}
+{{end}}
+
+<section class="converter-info">
+  <h2>Convert a meeting, call, or travel time</h2>
+  <p>Choose your starting city, enter the date and local time there, then choose your destination and select “Convert time.” Both cards show the same moment, including any change of day. Use “Swap zones” to view the conversion in the other direction.</p>
+  <p>“Use current time” fills in the time now in your starting city. To share a specific meeting time, copy the link to your conversion.</p>
+</section>
+<section class="converter-info">
+  <h2>Does this account for daylight saving time?</h2>
+  <p>Yes. The converter uses the time zone rules for your selected date, so the difference between two cities may change during the year. If clocks skip your selected time, you’ll be asked to choose another. If a time occurs twice when clocks move back, you can choose the first or second occurrence.</p>
+  <p>Choose a city or a full time zone name, such as America/New_York, to avoid ambiguous abbreviations like CST or IST. A fixed offset such as UTC+05:30 always stays the same and does not adjust for daylight saving.</p>
+</section>
+<section class="converter-info">
+  <h2>Popular time zone conversions</h2>
+  <div class="converter-presets">
+    <a href="/timezone-converter?from=New+York&amp;to=London">New York to London</a>
+    <a href="/timezone-converter?from=London&amp;to=Tokyo">London to Tokyo</a>
+    <a href="/timezone-converter?from=Los+Angeles&amp;to=New+York">Los Angeles to New York</a>
+    <a href="/timezone-converter?from=UTC&amp;to=Asia%2FKolkata">UTC to India</a>
+    <a href="/timezone-converter?from=Sydney&amp;to=London">Sydney to London</a>
+  </div>
+</section>
+<script>
+(function () {
+  var form = document.getElementById("converter-form");
+  var local = document.getElementById("converter-local");
+  try {
+    var zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (zone && form.requestSubmit) {
+      local.hidden = false;
+      local.addEventListener("click", function () {
+        document.getElementById("converter-from").value = zone;
+        form.requestSubmit(document.getElementById("converter-now"));
+      });
+    }
+  } catch (e) { /* the form still works without browser time zone detection */ }
+  var copy = document.getElementById("converter-copy");
+  if (copy && navigator.clipboard && navigator.clipboard.writeText) {
+    copy.hidden = false;
+    copy.addEventListener("click", function () {
+      var feedback = document.getElementById("converter-feedback");
+      navigator.clipboard.writeText(document.getElementById("converter-share").href).then(function () {
+        feedback.textContent = "Link copied.";
+      }).catch(function () {
+        feedback.textContent = "Use the link beside this button to copy or bookmark the conversion.";
+      });
+    });
+  }
+})();
+</script>
+{{template "foot" .}}{{end}}

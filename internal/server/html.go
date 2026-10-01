@@ -32,6 +32,7 @@ type pageData struct {
 	Cities      []cityView
 	Query       string
 	Suggestions []string
+	Converter   *converterData
 }
 
 // cityView is one city pre-formatted for the template. TZ is set when

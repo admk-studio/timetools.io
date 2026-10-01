@@ -1,8 +1,11 @@
 package server
 
 import (
+	"container/list"
+	"fmt"
 	"net"
 	"net/http"
+	"net/netip"
 	"strings"
 	"sync"
 	"time"
@@ -16,20 +19,23 @@ type limiter struct {
 	rate    float64 // tokens added per second
 	burst   float64 // bucket capacity
 	now     func() time.Time
+	order   *list.List // least recently used first
 }
 
 type bucket struct {
 	tokens float64
 	last   time.Time
+	entry  *list.Element
 }
 
-// sweepThreshold bounds memory: when the map grows past this we drop
-// buckets that have been idle long enough to be full again anyway.
-const sweepThreshold = 8192
+// maxBuckets is a hard bound. Only fully replenished idle buckets may be
+// replaced, so rotating identities cannot reset active clients' limits.
+const maxBuckets = 8192
 
 func newLimiter(rpm, burst int, now func() time.Time) *limiter {
 	return &limiter{
 		buckets: make(map[string]*bucket),
+		order:   list.New(),
 		rate:    float64(rpm) / 60,
 		burst:   float64(burst),
 		now:     now,
@@ -43,13 +49,20 @@ func (l *limiter) allow(key string) bool {
 	now := l.now()
 	b, ok := l.buckets[key]
 	if !ok {
-		if len(l.buckets) >= sweepThreshold {
-			l.sweepLocked(now)
+		if len(l.buckets) >= maxBuckets {
+			oldest := l.order.Front()
+			old := l.buckets[oldest.Value.(string)]
+			if now.Sub(old.last).Seconds()*l.rate < l.burst {
+				return false
+			}
+			delete(l.buckets, oldest.Value.(string))
+			l.order.Remove(oldest)
 		}
-		b = &bucket{tokens: l.burst, last: now}
+		b = &bucket{tokens: l.burst, last: now, entry: l.order.PushBack(key)}
 		l.buckets[key] = b
 	}
 
+	l.order.MoveToBack(b.entry)
 	b.tokens += now.Sub(b.last).Seconds() * l.rate
 	if b.tokens > l.burst {
 		b.tokens = l.burst
@@ -62,31 +75,63 @@ func (l *limiter) allow(key string) bool {
 	return true
 }
 
-func (l *limiter) sweepLocked(now time.Time) {
-	idle := time.Duration(l.burst/l.rate) * time.Second
-	for key, b := range l.buckets {
-		if now.Sub(b.last) > idle {
-			delete(l.buckets, key)
+// parseTrustedProxies requires explicit peers whenever forwarded headers are enabled.
+func parseTrustedProxies(cfg Config) ([]netip.Prefix, error) {
+	if !cfg.TrustProxy {
+		return nil, nil
+	}
+	if strings.TrimSpace(cfg.TrustedProxies) == "" {
+		return nil, fmt.Errorf("TT_TRUST_PROXY requires TT_TRUSTED_PROXIES (proxy IPs or CIDRs)")
+	}
+	var prefixes []netip.Prefix
+	for _, value := range strings.Split(cfg.TrustedProxies, ",") {
+		value = strings.TrimSpace(value)
+		if ip, err := netip.ParseAddr(value); err == nil {
+			ip = ip.Unmap()
+			prefixes = append(prefixes, netip.PrefixFrom(ip, ip.BitLen()))
+		} else if prefix, err := netip.ParsePrefix(value); err == nil {
+			prefixes = append(prefixes, prefix.Masked())
+		} else {
+			return nil, fmt.Errorf("invalid trusted proxy %q", value)
 		}
 	}
+	return prefixes, nil
 }
 
-// clientIP identifies the caller for rate limiting. Behind a reverse
-// proxy the remote address is the proxy itself, so trust the first entry
-// of X-Forwarded-For — but only when configured to, because that header
-// is attacker-controlled on a directly exposed server.
-func clientIP(r *http.Request, trustProxy bool) string {
-	if trustProxy {
-		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-			first, _, _ := strings.Cut(xff, ",")
-			if ip := strings.TrimSpace(first); ip != "" {
-				return ip
-			}
+func trustedIP(ip netip.Addr, prefixes []netip.Prefix) bool {
+	for _, prefix := range prefixes {
+		if prefix.Contains(ip.Unmap()) {
+			return true
 		}
 	}
+	return false
+}
+
+func remoteIP(r *http.Request) netip.Addr {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		return r.RemoteAddr
+		host = r.RemoteAddr
 	}
-	return host
+	ip, _ := netip.ParseAddr(host)
+	return ip.Unmap()
+}
+
+// Walk from the connected peer toward the client, stopping at the first
+// untrusted address. An untrusted leftmost header value cannot override it.
+// Malformed chains fall back to the connected peer, never a supplied identity.
+func clientIP(r *http.Request, prefixes []netip.Prefix) string {
+	peer := remoteIP(r)
+	if !peer.IsValid() {
+		return "unknown"
+	}
+	ip := peer
+	values := strings.Split(strings.Join(r.Header.Values("X-Forwarded-For"), ","), ",")
+	for i := len(values) - 1; i >= 0 && trustedIP(ip, prefixes); i-- {
+		next, err := netip.ParseAddr(strings.TrimSpace(values[i]))
+		if err != nil {
+			return peer.String()
+		}
+		ip = next.Unmap()
+	}
+	return ip.String()
 }

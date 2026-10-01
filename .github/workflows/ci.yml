@@ -31,6 +31,9 @@ jobs:
       - name: tests
         run: go test -race ./...
 
+      - name: browser clock tests
+        run: node --test internal/server/clock_test.cjs
+
       - name: build
         run: CGO_ENABLED=0 go build ./...
 

@@ -103,7 +103,13 @@ func writeChart(b *strings.Builder, cities []City, o Options, st styler, nameW i
 	for _, c := range cities {
 		var cells strings.Builder
 		for h := 0; h < 24; h++ {
-			local := midnight.Add(time.Duration(h) * time.Hour).In(c.Now.Location())
+			// Columns are civil hours, not elapsed hours since midnight.
+			instant := time.Date(y, m, d, h, 0, 0, 0, anchor.Now.Location())
+			if instant.Hour() != h || instant.Minute() != 0 {
+				cells.WriteString("-") // this hour was skipped by a clock change
+				continue
+			}
+			local := instant.In(c.Now.Location())
 			working := local.Hour() >= workStart && local.Hour() < workEnd
 			switch {
 			case h == nowHour:
@@ -128,29 +134,58 @@ func overlapLine(cities []City, midnight time.Time, o Options) string {
 	if len(cities) < 2 {
 		return ""
 	}
-	var ranges []string
-	start := -1
-	for h := 0; h <= 24; h++ {
-		all := h < 24
-		if all {
-			for _, c := range cities {
-				lh := midnight.Add(time.Duration(h) * time.Hour).In(c.Now.Location()).Hour()
-				if lh < workStart || lh >= workEnd {
-					all = false
-					break
+	end := midnight.AddDate(0, 0, 1)
+	shared := []workInterval{{midnight, end}}
+	for _, city := range cities {
+		var next []workInterval
+		for _, hours := range workingIntervals(midnight, end, city.Now.Location()) {
+			for _, current := range shared {
+				start, finish := hours.start, hours.end
+				if current.start.After(start) {
+					start = current.start
+				}
+				if current.end.Before(finish) {
+					finish = current.end
+				}
+				if start.Before(finish) {
+					next = append(next, workInterval{start, finish})
 				}
 			}
 		}
-		switch {
-		case all && start == -1:
-			start = h
-		case !all && start != -1:
-			ranges = append(ranges, fmt.Sprintf("%02d:00-%02d:00", start, h))
-			start = -1
-		}
+		shared = next
 	}
-	if len(ranges) == 0 {
+	if len(shared) == 0 {
 		return "no shared working hours"
 	}
+	var ranges []string
+	for _, interval := range shared {
+		start := interval.start.In(midnight.Location()).Format("15:04")
+		finish := interval.end.In(midnight.Location()).Format("15:04")
+		if interval.end.Equal(end) {
+			finish = "24:00"
+		}
+		ranges = append(ranges, start+"-"+finish)
+	}
 	return fmt.Sprintf("everyone is at work %s, %s time", strings.Join(ranges, " and "), cities[0].Name)
+}
+
+type workInterval struct{ start, end time.Time }
+
+// Construct each local day's working interval using calendar times. This
+// preserves fractional offsets and accounts for clock changes during the day.
+func workingIntervals(start, end time.Time, loc *time.Location) []workInterval {
+	y, m, d := start.In(loc).Date()
+	ey, em, ed := end.In(loc).Date()
+	// Iterate calendar dates in UTC so even zones that skip a midnight advance.
+	date := time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+	last := time.Date(ey, em, ed, 0, 0, 0, 0, time.UTC)
+	var intervals []workInterval
+	for ; !date.After(last); date = date.AddDate(0, 0, 1) {
+		y, m, d := date.Date()
+		intervals = append(intervals, workInterval{
+			time.Date(y, m, d, workStart, 0, 0, 0, loc),
+			time.Date(y, m, d, workEnd, 0, 0, 0, loc),
+		})
+	}
+	return intervals
 }

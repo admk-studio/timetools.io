@@ -311,14 +311,18 @@ func TestRateLimitEndToEnd(t *testing.T) {
 }
 
 func TestClientIP(t *testing.T) {
+	trusted, err := parseTrustedProxies(Config{TrustProxy: true, TrustedProxies: "10.0.0.1"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.RemoteAddr = "10.0.0.1:5555"
 	req.Header.Set("X-Forwarded-For", "203.0.113.9, 10.0.0.1")
 
-	if ip := clientIP(req, false); ip != "10.0.0.1" {
+	if ip := clientIP(req, nil); ip != "10.0.0.1" {
 		t.Errorf("untrusted proxy: ip = %q, want 10.0.0.1", ip)
 	}
-	if ip := clientIP(req, true); ip != "203.0.113.9" {
+	if ip := clientIP(req, trusted); ip != "203.0.113.9" {
 		t.Errorf("trusted proxy: ip = %q, want 203.0.113.9", ip)
 	}
 }
@@ -326,6 +330,7 @@ func TestClientIP(t *testing.T) {
 func TestHTTPSUpgradeForBrowsersOnly(t *testing.T) {
 	cfg := FromEnv()
 	cfg.TrustProxy = true
+	cfg.TrustedProxies = "192.0.2.1"
 	s, err := New(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatal(err)

@@ -11,6 +11,7 @@ run:
 
 test:
 	go test ./...
+	node --test internal/server/clock_test.cjs
 
 vet:
 	go vet ./...
@@ -21,6 +22,8 @@ fmt:
 # Regenerates the zone table; needs a host with tzdata installed.
 generate:
 	go run ./gen/zones > internal/tz/zones_gen.go
+	go run ./gen/tznames > internal/tz/names_gen.go
+	gofmt -w internal/tz/zones_gen.go internal/tz/names_gen.go
 
 docker:
 	docker build --build-arg VERSION=$(VERSION) -t timetools .

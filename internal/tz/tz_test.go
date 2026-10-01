@@ -2,6 +2,7 @@ package tz
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -86,7 +87,7 @@ func TestResolveLocationsLoad(t *testing.T) {
 
 func TestResolveTZDBLinks(t *testing.T) {
 	// Links like Asia/Calcutta are not in zone1970.tab but must still
-	// resolve via the LoadLocation fallback.
+	// resolve via the complete name/link index.
 	p, err := Resolve("asia/calcutta")
 	if err != nil {
 		t.Fatalf("Resolve(asia/calcutta): %v", err)
@@ -95,7 +96,7 @@ func TestResolveTZDBLinks(t *testing.T) {
 		t.Errorf("Zone = %q, want Asia/Calcutta", p.Zone)
 	}
 	if p.HasCoords {
-		t.Error("link zones resolved by guess should not claim coordinates")
+		t.Error("link zones without coordinate data should not claim coordinates")
 	}
 }
 
@@ -112,6 +113,10 @@ func TestResolveFixedOffset(t *testing.T) {
 		{"utc+14", 14 * 3600, "UTC+14:00"},
 		{"utc-12", -12 * 3600, "UTC-12:00"},
 		{"utc+0", 0, "UTC"},
+		{"utc-0:30", -1800, "UTC-00:30"},
+		{"utc-0030", -1800, "UTC-00:30"},
+		{"utc+0:45", 2700, "UTC+00:45"},
+		{"utc-0", 0, "UTC"},
 	}
 	for _, tt := range tests {
 		p, err := Resolve(tt.query)
@@ -134,7 +139,7 @@ func TestResolveFixedOffset(t *testing.T) {
 	}
 
 	// Out-of-range and malformed offsets must not resolve.
-	for _, q := range []string{"utc+15", "utc-13", "utc+5:75", "utc+abc"} {
+	for _, q := range []string{"utc+15", "utc-13", "utc+5:75", "utc+abc", "utc+5:-30", "utc+-5", "utc--5", "utc++5", "utc+5:+30", "utc+5:3", "utc+5:030", "utc+", "gmt-", "utc+14:01", "utc-12:01"} {
 		if _, err := Resolve(q); err == nil {
 			t.Errorf("Resolve(%q) should fail", q)
 		}
@@ -230,6 +235,28 @@ func TestSuggestionTokenUsable(t *testing.T) {
 		for _, s := range nf.Suggestions {
 			if _, err := Resolve(s); err != nil {
 				t.Errorf("suggestion %q for %q does not resolve: %v", s, q, err)
+			}
+		}
+	}
+}
+
+func TestAllIANAZoneNames(t *testing.T) {
+	for _, name := range ianaNames {
+		if _, err := loadLocation(name); err != nil {
+			t.Errorf("%s cannot load: %v", name, err)
+		}
+		// Bare abbreviations deliberately retain the curated alias meaning.
+		if !strings.Contains(name, "/") {
+			continue
+		}
+		for _, query := range []string{name, strings.ToLower(name), strings.ToUpper(name)} {
+			p, err := Resolve(query)
+			if err != nil {
+				t.Errorf("%s: %v", query, err)
+				continue
+			}
+			if p.Zone != name {
+				t.Errorf("%s resolved to %s", query, p.Zone)
 			}
 		}
 	}

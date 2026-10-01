@@ -7,30 +7,37 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"time"
 )
 
 type Server struct {
-	cfg     Config
-	log     *slog.Logger
-	limiter *limiter
-	tmpl    *template.Template
+	cfg            Config
+	trustedProxies []netip.Prefix
+	log            *slog.Logger
+	limiter        *limiter
+	tmpl           *template.Template
 
 	// now is swappable so handler tests can pin the clock.
 	now func() time.Time
 }
 
 func New(cfg Config, log *slog.Logger) (*Server, error) {
+	trusted, err := parseTrustedProxies(cfg)
+	if err != nil {
+		return nil, err
+	}
 	tmpl, err := parseTemplates()
 	if err != nil {
 		return nil, fmt.Errorf("parsing templates: %w", err)
 	}
 	return &Server{
-		cfg:     cfg,
-		log:     log,
-		limiter: newLimiter(cfg.RateRPM, cfg.RateBurst, time.Now),
-		tmpl:    tmpl,
-		now:     time.Now,
+		cfg:            cfg,
+		trustedProxies: trusted,
+		log:            log,
+		limiter:        newLimiter(cfg.RateRPM, cfg.RateBurst, time.Now),
+		tmpl:           tmpl,
+		now:            time.Now,
 	}, nil
 }
 
@@ -64,7 +71,7 @@ func (s *Server) route(w http.ResponseWriter, r *http.Request) {
 	// not blanket-redirect to HTTPS. Instead we upgrade selectively:
 	// browsers get sent to HTTPS, terminals get their answer over HTTP.
 	// Only possible when a trusted proxy reports the original scheme.
-	if s.cfg.TrustProxy && r.Header.Get("X-Forwarded-Proto") == "http" &&
+	if trustedIP(remoteIP(r), s.trustedProxies) && r.Header.Get("X-Forwarded-Proto") == "http" &&
 		negotiate(r) == formatHTML {
 		http.Redirect(w, r, "https://"+r.Host+r.URL.RequestURI(), http.StatusMovedPermanently)
 		return
@@ -102,7 +109,7 @@ func (s *Server) rateLimit(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if !s.limiter.allow(clientIP(r, s.cfg.TrustProxy)) {
+		if !s.limiter.allow(clientIP(r, s.trustedProxies)) {
 			w.Header().Set("Retry-After", "10")
 			s.writeText(w, http.StatusTooManyRequests,
 				"easy there — rate limit hit, try again in a few seconds\n")

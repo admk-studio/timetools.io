@@ -5,6 +5,9 @@ whole service is standard library Go, and we'd like to keep it that way.
 
 ## Getting started
 
+Use Go 1.24 or newer. The browser clock regression tests also need Node.js
+18 or newer; production builds still require only Go.
+
 ```sh
 git clone https://github.com/admk-studio/timetools.io
 cd timetools.io
@@ -40,7 +43,9 @@ Then add a line to `TestResolve` in `internal/tz/tz_test.go` and run
 ## Regenerating the zone table
 
 `internal/tz/zones_gen.go` is generated from IANA's `zone1970.tab`.
-After a tzdata release:
+The complete name/link index in `internal/tz/names_gen.go` comes from the
+Go toolchain's `zoneinfo.zip`. Regenerate with an updated Go toolchain and
+host tzdata after a tzdata release:
 
 ```sh
 make generate

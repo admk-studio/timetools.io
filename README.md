@@ -47,7 +47,9 @@ $ curl timetools.io/nyc/london/tokyo
 ```
 
 The `┃` column is right now; the blocks are 09:00–18:00 in each city's
-local day. Drop Tokyo and it tells you `everyone is at work
+local day. The chart samples each labeled hour; a `-` marks an hour
+skipped by DST, and repeated hours appear once. The overlap below it uses
+exact minute boundaries. Drop Tokyo and it tells you `everyone is at work
 09:00-13:00, New York time`.
 
 ## What it understands
@@ -120,6 +122,10 @@ alias when='curl -s timetools.io/nyc/london/tokyo'
 
 ## Self-hosting
 
+The per-client limiter stores at most 8,192 identities. At capacity, new
+identities receive HTTP 429 until an idle bucket can be safely replaced;
+existing clients retain their limits and health checks remain available.
+
 The whole service is one static binary with **zero dependencies** — the
 time zone database and the sunrise math are compiled in. The container
 image is built `FROM scratch` and weighs a few megabytes.
@@ -133,8 +139,16 @@ make build && ./bin/timetools
 
 Works out of the box on Coolify, CapRover, Fly.io, or a bare VPS: point
 the platform at this repo, it builds the Dockerfile, and `/health` is
-your health check. Behind a reverse proxy set `TT_TRUST_PROXY=true` so
-rate limiting sees real client IPs.
+your health check. Behind a reverse proxy set `TT_TRUST_PROXY=true` and
+`TT_TRUSTED_PROXIES` to its IP addresses or CIDRs (for example,
+`127.0.0.1,::1` for a proxy on the same host). Startup fails if proxy
+trust is enabled without this list. Use the actual proxy addresses as
+seen by the server, including container network addresses where applicable.
+Only listed peers may supply forwarded headers. The proxy must overwrite
+or append the connecting client's IP to `X-Forwarded-For` and overwrite
+`X-Forwarded-Proto`. The server walks the IP chain from right to left,
+stopping at the first untrusted address. Keep trusted ranges limited to
+networks controlled by your proxies.
 
 ### Configuration
 
@@ -146,7 +160,8 @@ Everything is optional; defaults give a working server.
 | `TT_BASE_URL` | `timetools.io` | hostname printed in examples and hints |
 | `TT_RATE_RPM` | `120` | sustained requests/minute per client |
 | `TT_RATE_BURST` | `30` | extra burst allowance |
-| `TT_TRUST_PROXY` | `false` | trust `X-Forwarded-For` for client IPs |
+| `TT_TRUST_PROXY` | `false` | enable forwarded headers from configured proxies |
+| `TT_TRUSTED_PROXIES` | *(empty)* | comma-separated proxy IPs/CIDRs; required when proxy trust is enabled |
 | `TT_REPO_URL` | this repo | source link in the footer |
 | `TT_LINK_TEXT` / `TT_LINK_URL` | *(empty)* | optional footer link for your instance |
 

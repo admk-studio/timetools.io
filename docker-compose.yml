@@ -6,8 +6,10 @@ services:
     environment:
       TT_BASE_URL: localhost:8080
       # Set to "true" when running behind a reverse proxy that sets
-      # X-Forwarded-For (Traefik, Caddy, nginx, Coolify).
+      # X-Forwarded-For (Traefik, Caddy, nginx, Coolify), and configure
+      # TT_TRUSTED_PROXIES with its actual IPs or CIDRs.
       TT_TRUST_PROXY: "false"
+      # TT_TRUSTED_PROXIES: "172.20.0.2"
       # Optional footer link shown on the HTML pages of your instance:
       #   TT_LINK_TEXT: example.com
       #   TT_LINK_URL: https://example.com

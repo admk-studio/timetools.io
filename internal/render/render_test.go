@@ -201,3 +201,49 @@ func TestFormatHelpers(t *testing.T) {
 		t.Errorf("fmtDelta = %q", got)
 	}
 }
+
+func TestOverlapCalendarBoundaries(t *testing.T) {
+	cases := []struct{ name, anchor, other, date, want string }{
+		{"half hour", "UTC", "Asia/Kolkata", "2024-07-16", "09:00-12:30"},
+		{"quarter hour", "UTC", "Asia/Kathmandu", "2024-07-16", "09:00-12:15"},
+		{"spring forward", "America/New_York", "UTC", "2024-03-10", "09:00-14:00"},
+		{"fall back", "America/New_York", "UTC", "2024-11-03", "09:00-13:00"},
+		{"fractional DST", "Australia/Lord_Howe", "Australia/Sydney", "2024-10-06", "09:00-18:00"},
+		{"date line", "Pacific/Kiritimati", "Pacific/Honolulu", "2024-07-16", "09:00-18:00"},
+		{"year boundary", "Pacific/Kiritimati", "Pacific/Honolulu", "2025-01-01", "09:00-18:00"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			anchor, err := time.LoadLocation(tc.anchor)
+			if err != nil {
+				t.Fatal(err)
+			}
+			other, err := time.LoadLocation(tc.other)
+			if err != nil {
+				t.Fatal(err)
+			}
+			midnight, err := time.ParseInLocation("2006-01-02", tc.date, anchor)
+			if err != nil {
+				t.Fatal(err)
+			}
+			now := midnight.Add(12 * time.Hour)
+			cities := []City{{Name: tc.anchor, Zone: tc.anchor, Now: now}, {Name: tc.other, Zone: tc.other, Now: now.In(other)}}
+			got := overlapLine(cities, midnight, Options{Plain: true})
+			want := "everyone is at work " + tc.want + ", " + tc.anchor + " time"
+			if got != want {
+				t.Errorf("got %q, want %q", got, want)
+			}
+			// The anchor's work blocks must start at civil 09:00 even on DST days.
+			var chart strings.Builder
+			writeChart(&chart, cities, Options{Plain: true}, styler{}, len(tc.anchor)+3)
+			row := strings.Split(chart.String(), "\n")[2]
+			cells := row[2+len(tc.anchor)+3:]
+			if cells[8] == '#' || cells[9] != '#' {
+				t.Errorf("misaligned chart: %s", cells)
+			}
+			if tc.name == "spring forward" && cells[2] != '-' {
+				t.Errorf("missing skipped-hour marker: %s", cells)
+			}
+		})
+	}
+}

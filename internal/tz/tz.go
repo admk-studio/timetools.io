@@ -16,6 +16,8 @@ import (
 )
 
 //go:generate sh -c "go run ../../gen/zones > zones_gen.go"
+//go:generate sh -c "go run ../../gen/tznames > names_gen.go"
+//go:generate gofmt -w zones_gen.go names_gen.go
 
 // Zone is one canonical IANA zone from zone1970.tab. The coordinates are
 // those of the zone's principal city.
@@ -76,6 +78,7 @@ func (e *NotFoundError) Error() string {
 var (
 	buildOnce sync.Once
 	index     map[string]Place
+	ianaIndex map[string]string
 	indexKeys []string // sorted, for suggestion scans
 )
 
@@ -89,6 +92,21 @@ func Resolve(query string) (Place, error) {
 	if p, ok := parseFixedOffset(q); ok {
 		return p, nil
 	}
+	// Reject malformed offset syntax before forgiving city normalization.
+	lower := strings.ToLower(q)
+	if strings.HasPrefix(lower, "utc+") || strings.HasPrefix(lower, "utc-") ||
+		strings.HasPrefix(lower, "gmt+") || strings.HasPrefix(lower, "gmt-") {
+		return Place{}, &NotFoundError{Query: query}
+	}
+	// Preserve punctuation in full IANA names, especially Etc/GMT+N versus -N.
+	if strings.Contains(q, "/") {
+		if name, ok := ianaIndex[strings.ToLower(strings.ReplaceAll(q, " ", "_"))]; ok {
+			if z, ok := zoneByName(name); ok {
+				return Place{Display: cityOf(name), Zone: name, Lat: z.Lat, Lon: z.Lon, HasCoords: true}, nil
+			}
+			return Place{Display: cityOf(name), Zone: name}, nil
+		}
+	}
 	norm := normalize(q)
 	if norm == "" {
 		return Place{}, &NotFoundError{Query: query}
@@ -96,10 +114,7 @@ func Resolve(query string) (Place, error) {
 	if p, ok := index[norm]; ok {
 		return p, nil
 	}
-	// The canonical table only has zones from zone1970.tab; the full tzdb
-	// also carries links like Asia/Calcutta. Reconstruct a plausible IANA
-	// name and let LoadLocation have the final word.
-	if name, ok := guessIANAName(q); ok {
+	if name, ok := ianaIndex[strings.ToLower(q)]; ok {
 		return Place{Display: cityOf(name), Zone: name}, nil
 	}
 	return Place{}, &NotFoundError{Query: query, Suggestions: suggest(norm)}
@@ -113,6 +128,10 @@ func Zones() []Zone {
 
 func buildIndex() {
 	index = make(map[string]Place, 3*len(zones))
+	ianaIndex = make(map[string]string, len(ianaNames))
+	for _, name := range ianaNames {
+		ianaIndex[strings.ToLower(name)] = name
+	}
 
 	add := func(key string, p Place) {
 		if key == "" {
@@ -199,28 +218,6 @@ var accentFold = map[rune]string{
 	'ß': "ss", 'æ': "ae", 'œ': "oe",
 }
 
-// guessIANAName rebuilds tzdb capitalization from a casual query:
-// "asia/calcutta" → "Asia/Calcutta", "australia/lord howe" →
-// "Australia/Lord_Howe". Only names LoadLocation accepts are returned.
-func guessIANAName(q string) (string, bool) {
-	if !strings.Contains(q, "/") {
-		return "", false
-	}
-	segments := strings.Split(q, "/")
-	for i, seg := range segments {
-		words := strings.FieldsFunc(seg, func(r rune) bool { return r == ' ' || r == '_' })
-		for j, w := range words {
-			words[j] = titleASCII(w)
-		}
-		segments[i] = strings.Join(words, "_")
-	}
-	name := strings.Join(segments, "/")
-	if _, err := loadLocation(name); err != nil {
-		return "", false
-	}
-	return name, true
-}
-
 // parseFixedOffset handles "utc+5", "gmt-3", "utc+05:30" style queries.
 func parseFixedOffset(q string) (Place, bool) {
 	s := strings.ToLower(strings.TrimSpace(q))
@@ -245,9 +242,15 @@ func parseFixedOffset(q string) (Place, bool) {
 
 	hh, mm := s, "0"
 	if h, m, ok := strings.Cut(s, ":"); ok {
+		if len(m) != 2 {
+			return Place{}, false
+		}
 		hh, mm = h, m
 	} else if len(s) == 4 { // "0530"
 		hh, mm = s[:2], s[2:]
+	}
+	if len(hh) < 1 || len(hh) > 2 || !digits(hh) || !digits(mm) {
+		return Place{}, false
 	}
 	hours, err := strconv.Atoi(hh)
 	if err != nil || len(hh) > 2 {
@@ -265,7 +268,12 @@ func parseFixedOffset(q string) (Place, bool) {
 	if offset == 0 {
 		return Place{Display: "UTC", Zone: "UTC", fixed: time.UTC}, true
 	}
-	name := fmt.Sprintf("UTC%+03d:%02d", sign*hours, minutes)
+	signChar := "+"
+	if offset < 0 {
+		signChar = "-"
+	}
+	magnitude := abs(offset)
+	name := fmt.Sprintf("UTC%s%02d:%02d", signChar, magnitude/3600, magnitude%3600/60)
 	return Place{Display: name, Zone: name, fixed: time.FixedZone(name, offset)}, true
 }
 
@@ -340,17 +348,16 @@ func levenshtein(a, b string) int {
 	return prev[len(b)]
 }
 
-// titleASCII uppercases the first letter of an ASCII word; tzdb names
-// never contain anything beyond ASCII.
-func titleASCII(w string) string {
-	w = strings.ToLower(w)
-	if w == "" {
-		return w
+func digits(s string) bool {
+	if s == "" {
+		return false
 	}
-	if w[0] >= 'a' && w[0] <= 'z' {
-		return string(w[0]-32) + w[1:]
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
 	}
-	return w
+	return true
 }
 
 func abs(n int) int {

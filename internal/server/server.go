@@ -3,6 +3,7 @@
 package server
 
 import (
+	_ "embed"
 	"fmt"
 	"html/template"
 	"log/slog"
@@ -10,6 +11,9 @@ import (
 	"net/netip"
 	"time"
 )
+
+//go:embed static/3c742b38d7cf4a149482bb6a3d50c987.txt
+var indexNowKey string
 
 type Server struct {
 	cfg            Config
@@ -94,6 +98,8 @@ func (s *Server) route(w http.ResponseWriter, r *http.Request) {
 		s.writeText(w, http.StatusOK, s.now().UTC().Format(time.RFC3339)+"\n")
 	case "zones":
 		s.handleZones(w, r)
+	case "3c742b38d7cf4a149482bb6a3d50c987.txt":
+		s.writeText(w, http.StatusOK, indexNowKey)
 	case "robots.txt":
 		s.writeText(w, http.StatusOK, "User-agent: *\nAllow: /\n")
 	case "favicon.ico":

@@ -3,7 +3,7 @@
 package server
 
 import (
-	_ "embed"
+	"embed"
 	"fmt"
 	"html/template"
 	"log/slog"
@@ -14,6 +14,9 @@ import (
 
 //go:embed static/3c742b38d7cf4a149482bb6a3d50c987.txt
 var indexNowKey string
+
+//go:embed static/google836ae15ac195447e.html static/BingSiteAuth.xml static/sitemap.xml
+var searchFiles embed.FS
 
 type Server struct {
 	cfg            Config
@@ -100,8 +103,25 @@ func (s *Server) route(w http.ResponseWriter, r *http.Request) {
 		s.handleZones(w, r)
 	case "3c742b38d7cf4a149482bb6a3d50c987.txt":
 		s.writeText(w, http.StatusOK, indexNowKey)
+	case "google836ae15ac195447e.html", "bingsiteauth.xml", "sitemap.xml":
+		name := trimPath(r)
+		contentType := "application/xml; charset=utf-8"
+		if name == "bingsiteauth.xml" {
+			name = "BingSiteAuth.xml"
+		} else if name == "google836ae15ac195447e.html" {
+			contentType = "text/html; charset=utf-8"
+		}
+		data, err := searchFiles.ReadFile("static/" + name)
+		if err != nil {
+			http.Error(w, "file unavailable", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", contentType)
+		if r.Method != http.MethodHead {
+			_, _ = w.Write(data)
+		}
 	case "robots.txt":
-		s.writeText(w, http.StatusOK, "User-agent: *\nAllow: /\n")
+		s.writeText(w, http.StatusOK, "User-agent: *\nAllow: /\n\nSitemap: https://timetools.io/sitemap.xml\n")
 	case "favicon.ico":
 		w.WriteHeader(http.StatusNoContent)
 	default:
